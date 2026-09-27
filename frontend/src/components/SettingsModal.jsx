@@ -923,7 +923,7 @@ function SettingsModal({ onClose }) {
   const [form, setForm] = useState({
     openai_api_key: '', openai_oauth_token: '', anthropic_api_key: '', anthropic_oauth_token: '',
     openrouter_api_key: '',
-    lmstudio_base_url: 'http://localhost:1234', ollama_base_url: 'http://localhost:11434',
+    lmstudio_base_url: 'https://dumpling-lily-tumbling.ngrok-free.dev', ollama_base_url: 'http://localhost:11434',
     ...settings,
   })
 

@@ -31,9 +31,7 @@ risk_levels:
   - zap_scan
 security:
   allowed_scope:
-  - 192.168.1.0/24
-  - 10.0.0.0/8
-  - 172.16.0.0/12
+  - 0.0.0.0/0
   audit_log: audit.log
   max_command_timeout: 1300
   require_scope_check: true

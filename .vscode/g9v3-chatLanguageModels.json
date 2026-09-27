@@ -1,0 +1,24 @@
+[
+  {
+    "name": "Local G9v3",
+    "vendor": "customendpoint",
+    "apiType": "chat-completions",
+    "apiKey": "local",
+    "models": [
+      {
+        "id": "g9v3-3b-heretic",
+        "name": "G9v3-3B Heretic",
+        "url": "http://127.0.0.1:8002/v1/chat/completions",
+        "apiType": "chat-completions",
+        "toolCalling": true,
+        "maxInputTokens": 3500,
+        "maxOutputTokens": 4096,
+        "contextWindow": 4096,
+        "modelOptions": {
+          "temperature": 0.7,
+          "top_p": 0.95
+        }
+      }
+    ]
+  }
+]

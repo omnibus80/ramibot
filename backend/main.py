@@ -6,6 +6,7 @@ import base64
 import sys
 import uuid
 import ipaddress
+from dotenv import load_dotenv
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -52,6 +53,7 @@ from terminal import (
 
 SETTINGS_PATH = Path(__file__).parent / "settings.json"
 CONFIG_PATH = Path(__file__).parent.parent / "rami-kali" / "config.yaml"
+load_dotenv(Path(__file__).parent / ".env")
 
 skill_pipeline = SkillPipeline()
 
@@ -231,7 +233,7 @@ def get_adapter(provider: str):
         )
     elif provider == "lmstudio":
         return adapter_cls(
-            base_url=provider_settings.get("base_url", "http://localhost:1234/v1"),
+            base_url=provider_settings.get("base_url", "http://127.0.0.1:8002/v1"),
         )
     elif provider == "ollama":
         return adapter_cls(
@@ -320,6 +322,14 @@ class ChatRequest(BaseModel):
     response_language: str = "auto"
 
 
+class ParallelAgentsRequest(BaseModel):
+    tasks: list[str]
+    workers: int = 2
+    provider: str = "lmstudio"
+    model: str | None = None
+    reasoning_enabled: bool = False
+
+
 class ToolApprovalRequest(BaseModel):
     approval_id: str
     approved: bool
@@ -359,6 +369,49 @@ class FindingCreate(BaseModel):
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.post("/api/agents/parallel")
+async def run_parallel_agents(body: ParallelAgentsRequest):
+    """Run bounded specialist analyses against the shared model service.
+
+    These are logical workers, not separate model servers. Tool execution stays
+    in the approval-controlled chat loop so parallel analysis cannot bypass it.
+    """
+    tasks = [task.strip() for task in body.tasks if task and task.strip()]
+    if not tasks or len(tasks) > 4:
+        raise HTTPException(status_code=400, detail="Provide between 1 and 4 tasks")
+    workers = max(1, min(body.workers, 4))
+    settings = load_settings()
+    model = body.model or settings.get(body.provider, {}).get("model", "g9v3-3b-heretic")
+    adapter = get_adapter(body.provider)
+    semaphore = asyncio.Semaphore(workers)
+
+    async def run_agent(index: int, task: str):
+        async with semaphore:
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a focused specialist subagent. Analyze only the assigned task, "
+                        "state assumptions, identify failures, and return concrete findings for "
+                        "a coordinating agent. Do not claim actions you did not perform."
+                    ),
+                },
+                {"role": "user", "content": task},
+            ]
+            try:
+                result = await adapter.generate(
+                    messages,
+                    model,
+                    reasoning_enabled=body.reasoning_enabled,
+                )
+                return {"index": index, "task": task, "content": result.get("content", ""), "error": None}
+            except Exception as error:
+                return {"index": index, "task": task, "content": "", "error": str(error)}
+
+    results = await asyncio.gather(*(run_agent(index, task) for index, task in enumerate(tasks)))
+    return {"workers": workers, "model": model, "results": results}
 
 
 # --- Providers & Models ---
@@ -701,11 +754,8 @@ async def chat_stream(body: ChatRequest):
                 follow_history = list(history)
                 pending_calls = list(tool_calls_collected)
                 pending_traces = list(tool_traces)
-                MAX_TOOL_HOPS = 8
-
-                for _hop in range(MAX_TOOL_HOPS):
-                    if not pending_calls:
-                        break
+                first_follow_up = True
+                while pending_calls:
 
                     # Append assistant message + tool results for this hop
                     hop_content = "".join(content_parts) or ""
@@ -735,8 +785,9 @@ async def chat_stream(body: ChatRequest):
                         })
 
                     content_parts.clear()
-                    if _hop == 0:
+                    if first_follow_up:
                         yield {"event": "clear_content", "data": "{}"}
+                        first_follow_up = False
 
                     # Stream next generation (with tools so model can chain further)
                     next_calls: list = []

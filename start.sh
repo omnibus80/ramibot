@@ -92,11 +92,12 @@ fi
 # =============================================================================
 # 3. Start backend
 # =============================================================================
-info "Starting backend on http://localhost:8000 ..."
+BACKEND_PORT=8001
+info "Starting backend on http://localhost:${BACKEND_PORT} ..."
 (
     cd backend
     source .venv/bin/activate
-    python -m uvicorn main:app --reload --port 8000
+    python -m uvicorn main:app --reload --host 0.0.0.0 --port ${BACKEND_PORT}
 ) &
 BACKEND_PID=$!
 
@@ -124,7 +125,7 @@ FRONTEND_PID=$!
 
 success "RamiBot is starting up!"
 echo ""
-echo -e "  Backend:  ${CYAN}http://localhost:8000/docs${NC}"
+echo -e "  Backend:  ${CYAN}http://localhost:${BACKEND_PORT}/docs${NC}"
 echo -e "  Frontend: ${CYAN}http://localhost:5173${NC}"
 echo ""
 echo "  Press Ctrl+C to stop backend and frontend."

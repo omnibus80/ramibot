@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import useStore from '../store'
 import {
   Plus, X, Settings, PanelLeftClose, PanelLeftOpen,
-  Cpu, Brain, Wrench, ChevronDown, ChevronRight, Pencil, List, Swords, ShieldCheck, ShieldAlert,
+  Cpu, Brain, Wrench, ChevronDown, ChevronRight, Pencil, List, Swords, ShieldCheck, ShieldAlert, Globe2,
 } from 'lucide-react'
 
 /* ── shared micro-styles ─────────────────────────── */
@@ -79,7 +79,7 @@ function Toggle({ on, onClick }) {
 }
 
 /* ── Sidebar ─────────────────────────────────────── */
-function Sidebar({ onOpenSettings }) {
+function Sidebar({ onOpenSettings, onOpenOsiris }) {
   const {
     conversations, currentConversation, fetchConversation, createConversation, deleteConversation,
     providers, models, selectedProvider, selectedModel, mcpEnabled, reasoningEnabled,
@@ -592,6 +592,19 @@ function Sidebar({ onOpenSettings }) {
           </div>
 
           {/* Settings */}
+          <button
+            onClick={onOpenOsiris}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+              width: '100%', padding: '0.45rem 0.5rem', marginBottom: '0.4rem',
+              background: 'transparent', border: '1px solid var(--bd)', borderRadius: 0,
+              cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.62rem',
+              letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--t2)',
+            }}
+            title="Open Osiris dashboard"
+          >
+            <Globe2 size={13} /> WORLD INTEL
+          </button>
           <button
             onClick={onOpenSettings}
             style={{

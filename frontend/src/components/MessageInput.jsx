@@ -1,11 +1,35 @@
 import { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
-import { Send, Square } from 'lucide-react'
+import { Send, Square, Mic, MicOff } from 'lucide-react'
 
 function MessageInput() {
   const [input, setInput] = useState('')
+  const [listening, setListening] = useState(false)
   const textareaRef = useRef(null)
+  const recognitionRef = useRef(null)
   const { isStreaming, sendMessageStream, stopStreaming } = useStore()
+
+  const toggleVoice = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) return
+    if (listening) {
+      recognitionRef.current?.stop()
+      return
+    }
+    const recognition = new SpeechRecognition()
+    recognition.lang = navigator.language || 'en-US'
+    recognition.interimResults = true
+    recognition.continuous = false
+    recognition.onstart = () => setListening(true)
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results).map(result => result[0].transcript).join('')
+      setInput(transcript)
+    }
+    recognition.onerror = () => setListening(false)
+    recognition.onend = () => setListening(false)
+    recognitionRef.current = recognition
+    recognition.start()
+  }
 
   useEffect(() => {
     textareaRef.current?.focus()
@@ -79,6 +103,14 @@ function MessageInput() {
 
       {/* Action button */}
       <div style={{ padding: '0.5rem', flexShrink: 0, alignSelf: 'flex-end' }}>
+        <button
+          onClick={toggleVoice}
+          disabled={isStreaming || !(window.SpeechRecognition || window.webkitSpeechRecognition)}
+          title={listening ? 'Stop voice input' : 'Speak a message'}
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '1.85rem', height: '1.85rem', marginRight: '0.3rem', background: listening ? 'rgba(255, 50, 80, 0.15)' : 'transparent', border: '1px solid var(--bd)', borderRadius: 0, color: listening ? '#ff3250' : 'var(--t2)', cursor: isStreaming ? 'not-allowed' : 'pointer' }}
+        >
+          {listening ? <MicOff size={14} /> : <Mic size={14} />}
+        </button>
         {isStreaming ? (
           <button
             onClick={stopStreaming}

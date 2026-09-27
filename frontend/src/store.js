@@ -514,7 +514,7 @@ const useStore = create((set, get) => ({
         openai: { api_key: settings.openai_api_key || '', oauth_token: settings.openai_oauth_token || '' },
         anthropic: { api_key: settings.anthropic_api_key || '', oauth_token: settings.anthropic_oauth_token || '' },
         openrouter: { api_key: settings.openrouter_api_key || '' },
-        lmstudio: { base_url: settings.lmstudio_base_url || 'http://localhost:1234/v1' },
+        lmstudio: { base_url: settings.lmstudio_base_url || 'https://dumpling-lily-tumbling.ngrok-free.dev' },
         ollama: { base_url: settings.ollama_base_url || 'http://localhost:11434' },
         docker: { container: settings.docker_container || '' },
       }
