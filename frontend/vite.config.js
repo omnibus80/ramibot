@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    allowedHosts: ['dumpling-lily-tumbling.ngrok-free.dev'],
     proxy: {
       '/api': {
         target: 'http://localhost:8001',
