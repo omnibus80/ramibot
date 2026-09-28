@@ -15,138 +15,11 @@ success() { echo -e "${GREEN}[install]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[install]${NC} $*"; }
 error()   { echo -e "${RED}[install]${NC} $*"; }
 
-# ── Detect docker compose command ────────────────────────────────────────────
-detect_compose() {
-    if docker compose version &>/dev/null 2>&1 || sudo docker compose version &>/dev/null 2>&1; then
-        echo "docker compose"
-    elif command -v docker-compose &>/dev/null; then
-        echo "docker-compose"
-    else
-        echo ""
-    fi
-}
-
-# ── Check docker (with or without sudo) ──────────────────────────────────────
-docker_ok() {
-    docker info &>/dev/null 2>&1 || sudo docker info &>/dev/null 2>&1
-}
-
 # =============================================================================
-# 1. Prerequisite checks (collect ALL failures before aborting)
+# 1. Install missing host prerequisites
 # =============================================================================
 info "Checking prerequisites..."
-PREREQ_ERRORS=()
-
-# Python 3.9+
-if command -v python3 &>/dev/null; then
-    PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-    PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
-    PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
-    if [[ "$PY_MAJOR" -lt 3 ]] || ( [[ "$PY_MAJOR" -eq 3 ]] && [[ "$PY_MINOR" -lt 9 ]] ); then
-        PREREQ_ERRORS+=("Python 3.9+ required (found $PY_VER)")
-    else
-        info "  Python $PY_VER ... OK"
-    fi
-else
-    PREREQ_ERRORS+=("python3 not found — install Python 3.9+")
-fi
-
-# Node 18+
-if command -v node &>/dev/null; then
-    NODE_VER=$(node --version | sed 's/v//')
-    NODE_MAJOR=$(echo "$NODE_VER" | cut -d. -f1)
-    if [[ "$NODE_MAJOR" -lt 18 ]]; then
-        PREREQ_ERRORS+=("Node.js 18+ required (found v$NODE_VER)")
-    else
-        info "  Node.js v$NODE_VER ... OK"
-    fi
-else
-    PREREQ_ERRORS+=("node not found — install Node.js 18+")
-fi
-
-# npm
-if command -v npm &>/dev/null; then
-    info "  npm $(npm --version) ... OK"
-else
-    PREREQ_ERRORS+=("npm not found — install npm")
-fi
-
-# Docker — install if missing, then start
-if ! command -v docker &>/dev/null; then
-    warn "  Docker not found — installing..."
-    if command -v apt-get &>/dev/null; then
-        sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose
-    elif command -v dnf &>/dev/null; then
-        sudo dnf install -y docker docker-compose
-    elif command -v pacman &>/dev/null; then
-        sudo pacman -Sy --noconfirm docker docker-compose
-    fi
-fi
-
-if ! command -v docker &>/dev/null; then
-    PREREQ_ERRORS+=("Docker could not be installed — install manually: https://docs.docker.com/engine/install/")
-else
-    # Add current user to docker group (avoids needing sudo for docker commands)
-    if ! groups | grep -q docker; then
-        warn "  Adding $USER to docker group (no sudo needed after re-login)..."
-        sudo usermod -aG docker "$USER" || true
-    fi
-
-    # Ensure daemon is running
-    if docker_ok; then
-        info "  Docker (daemon running) ... OK"
-    else
-        warn "  Docker daemon not running — starting..."
-        if command -v systemctl &>/dev/null; then
-            sudo systemctl enable docker &>/dev/null || true
-            sudo systemctl start docker || true
-        elif command -v service &>/dev/null; then
-            sudo service docker start || true
-        fi
-        # Wait up to 20s for daemon to become ready
-        WAITED=0
-        while ! docker_ok; do
-            sleep 2; WAITED=$((WAITED+2))
-            [[ $WAITED -ge 20 ]] && break
-        done
-        if docker_ok; then
-            success "  Docker daemon started."
-        else
-            PREREQ_ERRORS+=("Docker daemon could not be started — run: sudo systemctl start docker")
-        fi
-    fi
-fi
-
-# Docker Compose
-COMPOSE_CMD=$(detect_compose)
-if [[ -n "$COMPOSE_CMD" ]]; then
-    info "  Docker Compose ($COMPOSE_CMD) ... OK"
-else
-    warn "  Docker Compose not found — attempting to install..."
-    if command -v apt-get &>/dev/null; then
-        sudo apt-get install -y docker-compose-plugin &>/dev/null || \
-        sudo apt-get install -y docker-compose &>/dev/null || true
-    elif command -v dnf &>/dev/null; then
-        sudo dnf install -y docker-compose-plugin &>/dev/null || \
-        sudo dnf install -y docker-compose &>/dev/null || true
-    elif command -v pacman &>/dev/null; then
-        sudo pacman -Sy --noconfirm docker-compose &>/dev/null || true
-    fi
-    COMPOSE_CMD=$(detect_compose)
-    if [[ -n "$COMPOSE_CMD" ]]; then
-        success "  Docker Compose installed ($COMPOSE_CMD)."
-    else
-        PREREQ_ERRORS+=("Docker Compose could not be installed — run: sudo apt-get install -y docker-compose")
-    fi
-fi
-
-if [[ ${#PREREQ_ERRORS[@]} -gt 0 ]]; then
-    error "Prerequisites check failed:"
-    for e in "${PREREQ_ERRORS[@]}"; do
-        error "  ✗ $e"
-    done
-    exit 1
-fi
+bash scripts/bootstrap-linux.sh
 success "All prerequisites met."
 
 # =============================================================================
@@ -176,8 +49,27 @@ info "Installing frontend npm dependencies..."
 (cd frontend && npm install --silent)
 success "Frontend dependencies installed."
 
+if [[ ! -f ".env" ]]; then cp .env.example .env; fi
+set -a
+source .env
+set +a
+
 # =============================================================================
-# 5. Settings file (never overwrite)
+# 5. Osiris Node application
+# =============================================================================
+bash scripts/setup-osiris.sh
+
+# =============================================================================
+# 6. Repository-local GGUF model
+# =============================================================================
+info "Setting up the repository-local G9v3-3B Heretic Q8_0 model..."
+bash scripts/setup-gguf.sh
+info "Building the native llama.cpp server..."
+bash scripts/setup-llama-server.sh
+success "Local GGUF model is ready."
+
+# =============================================================================
+# 7. Settings files (never overwrite)
 # =============================================================================
 if [[ ! -f "backend/settings.json" ]]; then
     info "Copying backend/settings.example.json → backend/settings.json ..."
@@ -186,20 +78,46 @@ if [[ ! -f "backend/settings.json" ]]; then
 else
     info "backend/settings.json already exists — skipping (your config is preserved)."
 fi
+if [[ ! -f "backend/.env" ]]; then
+    cp backend/.env.example backend/.env
+    warn "Set NGROK_AUTHTOKEN in backend/.env to enable your public ngrok URL."
+fi
+source .ramibot-ports 2>/dev/null || true
+bash scripts/setup-ports.sh
+source .ramibot-ports
 
 # =============================================================================
-# 6. Docker image build
+# 8. Optional Kali MCP container
 # =============================================================================
-info "Building rami-kali Docker image (this may take several minutes on first run)..."
-sudo docker build -t rami-kali rami-kali/
-success "Docker image built."
+DOCKER=(docker)
+if ! docker info >/dev/null 2>&1; then
+    if sudo -n docker info >/dev/null 2>&1; then
+        DOCKER=(sudo -n docker)
+    else
+        DOCKER=()
+    fi
+fi
 
-# =============================================================================
-# 7. Start container
-# =============================================================================
-info "Starting rami-kali container..."
-sudo $COMPOSE_CMD -f rami-kali/docker-compose.yml up -d
-success "rami-kali container is running."
+if [[ ${#DOCKER[@]} -gt 0 ]]; then
+    info "Building the optional rami-kali MCP image..."
+    "${DOCKER[@]}" build -t rami-kali rami-kali/
+    if "${DOCKER[@]}" compose version >/dev/null 2>&1; then
+        "${DOCKER[@]}" compose -f rami-kali/docker-compose.yml up -d
+    elif command -v docker-compose >/dev/null 2>&1; then
+        if [[ "${DOCKER[0]}" == sudo ]]; then
+            sudo -n docker-compose -f rami-kali/docker-compose.yml up -d
+        else
+            docker-compose -f rami-kali/docker-compose.yml up -d
+        fi
+    fi
+else
+    if [[ "${RAMIBOT_ALLOW_NO_DOCKER:-0}" == 1 ]]; then
+        warn "Docker daemon unavailable; continuing in explicit no-Kali development mode."
+    else
+        error "Rami-Kali MCP requires Docker Engine and Compose. Start the Docker daemon and rerun bash install.sh."
+        exit 1
+    fi
+fi
 
 # =============================================================================
 # Done
@@ -211,6 +129,6 @@ success "============================================================"
 echo ""
 echo -e "  ${YELLOW}Next steps:${NC}"
 echo "  1. Edit backend/settings.json — add your LLM API key(s)"
-echo "  2. Run:  bash start.sh"
-echo "  3. Open: http://localhost:5173"
+echo "  2. Run:  bash setup.sh   (full setup, ngrok prompt, and server start)"
+echo "     Or:  bash start.sh   (start services after setup)"
 echo ""

@@ -136,7 +136,7 @@ function PanelApiKeys({ form, handleChange }) {
     { key: 'anthropic_api_key', label: 'Anthropic API Key', type: 'password', icon: Key, placeholder: 'sk-ant-...' },
     { key: 'anthropic_oauth_token', label: 'Anthropic OAuth Token', type: 'password', icon: Key, placeholder: 'sk-ant-oat01-... (currently blocked by Anthropic for third-party use)' },
     { key: 'openrouter_api_key', label: 'OpenRouter API Key', type: 'password', icon: Key, placeholder: 'sk-or-...' },
-    { key: 'lmstudio_base_url', label: 'LM Studio Base URL', type: 'text', icon: Globe, placeholder: 'http://localhost:1234' },
+    { key: 'lmstudio_base_url', label: 'Local GGUF Server URL', type: 'text', icon: Globe, placeholder: import.meta.env.VITE_LOCAL_LLM_URL || 'http://127.0.0.1:1234' },
     { key: 'ollama_base_url', label: 'Ollama Base URL', type: 'text', icon: Globe, placeholder: 'http://localhost:11434' },
   ]
   return (
@@ -566,7 +566,7 @@ function PanelSkillLog() {
   const fetchLog = async () => {
     setLoading(true)
     try {
-      const r = await fetch('http://localhost:8000/api/skills/log?limit=50')
+      const r = await fetch('/api/skills/log?limit=50')
       const data = await r.json()
       setEntries(data)
     } catch {}
@@ -574,7 +574,7 @@ function PanelSkillLog() {
   }
 
   const clearLog = async () => {
-    await fetch('http://localhost:8000/api/skills/log', { method: 'DELETE' })
+    await fetch('/api/skills/log', { method: 'DELETE' })
     setEntries([])
   }
 
@@ -923,7 +923,7 @@ function SettingsModal({ onClose }) {
   const [form, setForm] = useState({
     openai_api_key: '', openai_oauth_token: '', anthropic_api_key: '', anthropic_oauth_token: '',
     openrouter_api_key: '',
-    lmstudio_base_url: 'https://dumpling-lily-tumbling.ngrok-free.dev', ollama_base_url: 'http://localhost:11434',
+    lmstudio_base_url: import.meta.env.VITE_LOCAL_LLM_URL || 'http://127.0.0.1:1234', ollama_base_url: 'http://localhost:11434',
     ...settings,
   })
 

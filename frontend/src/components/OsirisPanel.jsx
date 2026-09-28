@@ -1,14 +1,10 @@
-import { ExternalLink, X } from 'lucide-react'
+import { X } from 'lucide-react'
 
 function getOsirisUrl() {
   const configured = import.meta.env.VITE_OSIRIS_URL
   if (configured) return configured
 
-  if (window.location.hostname.includes('.app.github.dev')) {
-    return `https://${window.location.hostname.replace(/-\d+(\.)/, '-3000$1')}`
-  }
-
-  return 'http://127.0.0.1:3000'
+  return '/osiris/'
 }
 
 function OsirisPanel({ onClose }) {
@@ -21,9 +17,6 @@ function OsirisPanel({ onClose }) {
           OSIRIS // WORLD INTEL
         </span>
         <div style={{ display: 'flex', gap: '0.35rem' }}>
-          <a href={url} target="_blank" rel="noreferrer" title="Open Osiris in a new tab" style={{ display: 'grid', placeItems: 'center', width: '1.8rem', height: '1.8rem', color: 'var(--t2)', border: '1px solid var(--bd)', textDecoration: 'none' }}>
-            <ExternalLink size={13} />
-          </a>
           <button onClick={onClose} title="Close Osiris" style={{ display: 'grid', placeItems: 'center', width: '1.8rem', height: '1.8rem', color: 'var(--t2)', background: 'transparent', border: '1px solid var(--bd)', cursor: 'pointer' }}>
             <X size={14} />
           </button>

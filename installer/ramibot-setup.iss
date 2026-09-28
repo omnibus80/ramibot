@@ -54,6 +54,8 @@ Source: "..\assets\*"; DestDir: "{app}\assets"; \
 ; Root-level files
 Source: "..\install.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\start.bat";   DestDir: "{app}"; Flags: ignoreversion
+Source: "..\compose.gguf.yaml"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\scripts\*"; DestDir: "{app}\scripts"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "..\README.md";   DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "..\LICENSE";     DestDir: "{app}"; Flags: ignoreversion
 Source: "..\Makefile";    DestDir: "{app}"; Flags: ignoreversion
@@ -146,12 +148,23 @@ function CheckDocker: Boolean;
 var
   Output: String;
   ResultCode: Integer;
+  DockerExe: String;
 begin
   Exec('cmd.exe', '/c docker --version > nul 2>&1',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  if ResultCode <> 0 then begin Result := False; Exit; end;
-  Output := GetCommandOutput('docker', '--version');
-  Result := (Pos('Docker', Output) > 0) or (Pos('docker', Output) > 0);
+  if ResultCode = 0 then
+  begin
+    Output := GetCommandOutput('docker', '--version');
+    if (Pos('Docker', Output) > 0) or (Pos('docker', Output) > 0) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+  DockerExe := ExpandConstant('{autopf}\Docker\Docker\resources\bin\docker.exe');
+  if not FileExists(DockerExe) then begin Result := False; Exit; end;
+  Exec(DockerExe, '--version', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := ResultCode = 0;
 end;
 
 // ---------------------------------------------------------------------------
@@ -234,13 +247,8 @@ begin
     Exit;
   end;
 
-  MsgBox('Python will now be installed using the official installer.' + #13#10 +
-         'Please follow the steps in the Python setup wizard.' + #13#10#13#10 +
-         'IMPORTANT: Check "Add Python to PATH" if prompted.',
-         mbInformation, MB_OK);
-
-  Exec(PythonExe, 'PrependPath=1',
-       '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+    Exec(PythonExe, '/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_test=0',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
   if ResultCode <> 0 then
     MsgBox('Python installation returned exit code ' + IntToStr(ResultCode) + '.' + #13#10 +
@@ -262,16 +270,44 @@ begin
       'https://nodejs.org/dist/v22.15.0/node-v22.15.0-x64.msi',
       'node-v22.15.0-x64.msi', '', nil);
 
-  MsgBox('Node.js will now be installed using the official installer.' + #13#10 +
-         'Please follow the steps in the Node.js setup wizard.',
-         mbInformation, MB_OK);
+  if not FileExists(NodeMsi) then
+  begin
+    MsgBox('Failed to download the official Node.js installer.', mbError, MB_OK);
+    Exit;
+  end;
 
-  Exec('msiexec.exe', '/i "' + NodeMsi + '"',
-       '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+  Exec('msiexec.exe', '/i "' + NodeMsi + '" /qn /norestart',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
   if ResultCode <> 0 then
     MsgBox('Node.js installation returned exit code ' + IntToStr(ResultCode) + '.' + #13#10 +
            'If Node.js was not installed correctly, please install it manually from nodejs.org.',
+           mbError, MB_OK);
+end;
+
+procedure InstallDockerDesktop;
+var
+  DockerInstaller: String;
+  ResultCode: Integer;
+begin
+  DockerInstaller := ExpandConstant('{tmp}\Docker-Desktop-Installer.exe');
+  if not FileExists(DockerInstaller) then
+    DownloadTemporaryFile(
+      'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe',
+      'Docker-Desktop-Installer.exe', '', nil);
+
+  if not FileExists(DockerInstaller) then
+  begin
+    MsgBox('Failed to download Docker Desktop. Check your internet connection and rerun setup.',
+           mbError, MB_OK);
+    Exit;
+  end;
+
+  Exec(DockerInstaller, 'install --quiet --accept-license',
+       '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+  if ResultCode <> 0 then
+    MsgBox('Docker Desktop installation returned exit code ' + IntToStr(ResultCode) + '.' + #13#10 +
+           'If Windows requires a reboot or WSL2 setup, complete that step and rerun the installer.',
            mbError, MB_OK);
 end;
 
@@ -287,17 +323,19 @@ begin
   NodeWasInstalled   := False;
   DepNoticeShown     := False;
 
-  // Docker (hard requirement)
+  // Docker Desktop (official installer; may require administrator approval or WSL2)
   if not CheckDocker then
   begin
-    if MsgBox('Docker Desktop is required to run RamiBot.' + #13#10#13#10 +
-              'Click OK to open the Docker Desktop download page in your browser.' + #13#10 +
-              'Click Cancel to close this installer.',
-              mbError, MB_OKCANCEL) = IDOK then
-      ShellExec('open', 'https://docs.docker.com/desktop/setup/install/windows-install/',
-                '', '', SW_SHOW, ewNoWait, ResultCode);
-    Result := False;
-    Exit;
+    MsgBox('Docker Desktop is missing. The official installer will run now; Windows may request administrator approval.',
+           mbInformation, MB_OK);
+    InstallDockerDesktop;
+    if not CheckDocker then
+    begin
+      MsgBox('Docker Desktop is still unavailable. Complete any Windows/WSL2 setup, then rerun this installer.',
+             mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
   end;
 
   // Python
@@ -344,19 +382,6 @@ begin
     else begin Result := False; Exit; end;
   end;
 
-  // Abort if PATH needs refresh
-  if PythonWasInstalled or NodeWasInstalled then
-  begin
-    MsgBox('Python and/or Node.js were just installed.' + #13#10#13#10 +
-           'Please restart the installer to continue.' + #13#10 +
-           'A new session is required for the PATH changes to take effect.' + #13#10#13#10 +
-           'TIP: If Python is still not found after restarting, go to:' + #13#10 +
-           'Settings > Apps > App execution aliases' + #13#10 +
-           'and disable the "python.exe" and "python3.exe" entries.',
-           mbInformation, MB_OK);
-    Result := False;
-    Exit;
-  end;
 end;
 
 // ---------------------------------------------------------------------------
@@ -376,6 +401,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   AppDir: String;
   ResultCode: Integer;
+  NgrokToken, NgrokDomain, NgrokSettings: String;
 begin
   if CurStep <> ssPostInstall then Exit;
 
@@ -392,6 +418,20 @@ begin
            'You can retry manually by running install.bat from the RamiBot folder.',
            mbError, MB_OK);
     Exit;
+  end;
+
+  if InputQuery('Public UI URL', 'Paste your ngrok authtoken (leave blank to keep a saved login or stay local):', True, NgrokToken) then
+  begin
+    NgrokDomain := '';
+    InputQuery('Public UI URL', 'Reserved ngrok domain (leave blank for an assigned URL):', False, NgrokDomain);
+    StringChangeEx(NgrokToken, #13, '', True);
+    StringChangeEx(NgrokToken, #10, '', True);
+    StringChangeEx(NgrokDomain, #13, '', True);
+    StringChangeEx(NgrokDomain, #10, '', True);
+    NgrokSettings := '';
+    if NgrokToken <> '' then NgrokSettings := 'NGROK_AUTHTOKEN=' + NgrokToken + #13#10;
+    NgrokSettings := NgrokSettings + 'NGROK_DOMAIN=' + NgrokDomain + #13#10;
+    SaveStringToFile(AppDir + '\backend\ngrok.env', NgrokSettings, False);
   end;
 
   SetProgress('Installation complete.', 1, 1);

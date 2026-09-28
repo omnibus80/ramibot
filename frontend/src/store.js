@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { exportReportAsPdf } from './reportPdf'
 
+const LOCAL_LLM_URL = import.meta.env.VITE_LOCAL_LLM_URL || 'http://127.0.0.1:1234'
+
 const PDF_CONFIRM_RE = /^(pdf|sí|si|yes|dale|ok|quiero|quiero pdf|sí quiero|si quiero|exportar pdf|descargar pdf|export pdf|download pdf|generate pdf|generar pdf|sí,?\s*por favor|si,?\s*por favor)$/i
 
 /**
@@ -22,7 +24,7 @@ const useStore = create((set, get) => ({
   messages: [],
   providers: [],
   models: [],
-  selectedProvider: 'openai',
+  selectedProvider: 'lmstudio',
   selectedModel: '',
   mcpEnabled: false,
   reasoningEnabled: false,
@@ -514,7 +516,7 @@ const useStore = create((set, get) => ({
         openai: { api_key: settings.openai_api_key || '', oauth_token: settings.openai_oauth_token || '' },
         anthropic: { api_key: settings.anthropic_api_key || '', oauth_token: settings.anthropic_oauth_token || '' },
         openrouter: { api_key: settings.openrouter_api_key || '' },
-        lmstudio: { base_url: settings.lmstudio_base_url || 'https://dumpling-lily-tumbling.ngrok-free.dev' },
+        lmstudio: { base_url: settings.lmstudio_base_url || LOCAL_LLM_URL },
         ollama: { base_url: settings.ollama_base_url || 'http://localhost:11434' },
         docker: { container: settings.docker_container || '' },
       }
@@ -535,6 +537,10 @@ const useStore = create((set, get) => ({
       const stored = localStorage.getItem('ramibot_settings')
       if (stored) {
         const parsed = JSON.parse(stored)
+        if (parsed.lmstudio_base_url?.includes('ngrok-free.dev') || parsed.lmstudio_base_url?.includes(':11435')) {
+          parsed.lmstudio_base_url = LOCAL_LLM_URL
+          localStorage.setItem('ramibot_settings', JSON.stringify(parsed))
+        }
         set({ settings: parsed })
         if (parsed.docker_container) {
           set({ dockerContainer: parsed.docker_container })
@@ -546,6 +552,8 @@ const useStore = create((set, get) => ({
       if (provider) {
         set({ selectedProvider: provider })
         get().fetchModels(provider)
+      } else {
+        get().fetchModels(get().selectedProvider)
       }
       if (model) {
         set({ selectedModel: model })

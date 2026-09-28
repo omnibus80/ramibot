@@ -1,0 +1,21 @@
+services:
+  gguf-server:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: ramibot-gguf
+    command:
+      - --model
+      - /models/g9v3-3b-q8_0.gguf
+      - --alias
+      - G9v3-3B-Heretic-Q8_0
+      - --host
+      - 0.0.0.0
+      - --port
+      - "1234"
+      - --ctx-size
+      - "8192"
+      - --jinja
+    ports:
+      - 127.0.0.1:${GGUF_PORT:-1234}:1234
+    volumes:
+      - ./models/gguf:/models:ro
+    restart: unless-stopped
