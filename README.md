@@ -99,17 +99,17 @@ A local-first AI chat interface for security operations. Supports multiple LLM p
 - Python 3.9+
 - Node.js 18+
 - npm
-- [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) (required — for the rami-kali MCP server, Docker terminal, and Tor features)
+- Docker Engine and Docker Compose (required only for the Rami-Kali MCP tools, Docker terminal, and Tor features)
+- About 3.2 GB of free disk space for the G9v3-3B Heretic Q8_0 GGUF model
+- Git, Node.js 18+ with npm, Python 3.9+, Docker Engine/Compose, and an ngrok account token for a public URL (Linux setup installs missing packages on supported distros)
 
 ### Windows Installer (easiest)
 
 Download `RamiBot-Setup-v3.8.0.exe` from the [Releases page](https://github.com/RamiBotAI/ramibot/releases), run it, and follow the wizard.
 
-**Before running the installer**, make sure [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) is installed and running. The installer checks for it and will abort if Docker is not found.
+The wizard installs Python, Node.js, and Docker Desktop if they are missing, then downloads the model, installs Osiris and ngrok, and asks for an ngrok token at the end. Launch RamiBot from the desktop shortcut; the world-intelligence panel is embedded in the same UI.
 
-The wizard checks for Python 3.9+ and Node.js 18+. If either is missing it downloads and installs them via their official wizards, then installs all Python and npm dependencies automatically. After the wizard completes, launch RamiBot from the desktop shortcut and add your API key(s) in **Settings**.
-
-> **First launch:** on the very first start, RamiBot automatically builds the rami-kali Docker image in the background. This can take a few minutes depending on your connection. Subsequent launches are instant — the image is already built and the container starts in seconds.
+> **First launch:** Docker Desktop may require WSL2 setup or a reboot. RamiBot starts the GGUF and Kali services when the Docker daemon is available; the application UI and Osiris run as local Node/Python processes.
 
 ## 🎥 Full Installation Demo (Windows)
 
@@ -119,22 +119,25 @@ The wizard checks for Python 3.9+ and Node.js 18+. If either is missing it downl
   </a>
 </p>
 
-### One-command install (recommended)
+### Quick Start (Linux)
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/RamiBotAI/ramibot.git
 cd ramibot
-
-# Linux / macOS
-bash install.sh
-
-# Windows
-install.bat
+bash setup.sh
 ```
 
-The script checks all prerequisites (Python, Node, Docker), installs missing ones automatically where possible, sets up the Python venv, installs npm dependencies, copies `settings.example.json → settings.json`, builds the rami-kali Docker image, and starts the container — all in one step. Running it again is safe; existing config is never overwritten.
+The setup installs missing Linux tools, downloads/verifies the G9v3 GGUF, clones Osiris, configures the app, then asks for ngrok credentials as its final setup prompt. Leave the domain blank for an assigned ngrok URL. Optional Osiris data-source keys remain blank; keyless feeds work without them. Docker Engine/Compose is required only for the Rami-Kali MCP container; llama.cpp, Osiris, the backend, and UI run as native processes. Set `RAMIBOT_ALLOW_NO_DOCKER=1` only for an explicit development run that cannot use Kali tools.
 
-After install, edit `backend/settings.json` and add your API key(s), then:
+The setup starts llama.cpp, Osiris, the backend, the UI, and ngrok. It chooses another port if a preferred port is occupied, waits for services, then prints the final public UI URL. Osiris is embedded in the RamiBot panel, not opened as another tab or container. On systemd Linux hosts, accept the service prompt to enable restart-on-failure and boot persistence.
+
+### Setup Changes
+
+Previously, local-model use expected a separately managed LM Studio/Ollama endpoint, Osiris was not installed or started by RamiBot, and startup relied on fixed ports and separately configured tunnel steps. The current Linux setup downloads the pinned G9v3-3B Heretic Q8_0 model into this checkout's ignored `models/gguf/`, builds/starts native llama.cpp, clones Osiris into ignored `osiris/`, embeds it at `/osiris`, assigns free ports, and prompts for ngrok credentials after installation. Rami-Kali remains the only Docker workload required by the complete Linux app. The optional systemd unit supervises the native app processes and restarts the service after failure or reboot.
+
+Generation uses 4096 tokens per model request and continues with additional requests whenever llama.cpp reports that the current chunk ended at its token limit. Continuation ends when the model returns a normal completion; incomplete tool-call payloads are rejected rather than executed. Parallel specialist work accepts up to five tasks and runs up to five workers.
+
+After install, add any optional API keys in **Settings**, then:
 
 ```bash
 # Linux / macOS

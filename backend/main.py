@@ -232,8 +232,11 @@ def get_adapter(provider: str):
             base_url=provider_settings.get("base_url", "https://openrouter.ai/api/v1"),
         )
     elif provider == "lmstudio":
+        base_url = provider_settings.get("base_url") or "http://127.0.0.1:1234"
+        if "ngrok-free.dev" in base_url or ":11435" in base_url:
+            base_url = "http://127.0.0.1:1234"
         return adapter_cls(
-            base_url=provider_settings.get("base_url", "http://127.0.0.1:8002/v1"),
+            base_url=base_url,
         )
     elif provider == "ollama":
         return adapter_cls(
@@ -379,9 +382,9 @@ async def run_parallel_agents(body: ParallelAgentsRequest):
     in the approval-controlled chat loop so parallel analysis cannot bypass it.
     """
     tasks = [task.strip() for task in body.tasks if task and task.strip()]
-    if not tasks or len(tasks) > 4:
-        raise HTTPException(status_code=400, detail="Provide between 1 and 4 tasks")
-    workers = max(1, min(body.workers, 4))
+    if not tasks or len(tasks) > 5:
+        raise HTTPException(status_code=400, detail="Provide between 1 and 5 tasks")
+    workers = max(2, min(body.workers, 5))
     settings = load_settings()
     model = body.model or settings.get(body.provider, {}).get("model", "g9v3-3b-heretic")
     adapter = get_adapter(body.provider)

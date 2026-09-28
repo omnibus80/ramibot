@@ -4,6 +4,7 @@ REM RamiBot — Daily startup (Windows)
 REM Usage: Double-click or run from cmd: start.bat
 REM =============================================================================
 cd /d "%~dp0"
+set "PATH=%ProgramFiles%\Docker\Docker\resources\bin;%ProgramFiles%\nodejs;%LocalAppData%\Programs\Python\Python312;%LocalAppData%\Programs\Python\Python312\Scripts;%PATH%"
 
 echo.
 echo [ramibot] ============================================================
@@ -29,6 +30,12 @@ if not exist "backend\settings.json" (
 if not exist "frontend\node_modules\" (
     echo [ramibot] ERROR: frontend\node_modules not found - run install.bat first.
     goto :fail
+)
+
+if not exist "osiris\node_modules\" (
+    echo [ramibot] First-run Osiris files are missing - running install.bat...
+    call install.bat
+    if errorlevel 1 goto :fail
 )
 
 echo [ramibot] Sanity checks passed.
@@ -78,7 +85,32 @@ goto :fail
 :compose_ready
 
 REM =============================================================================
-REM 4. Ensure rami-kali container is running
+REM 4. Ensure the repository-local GGUF model and server are running
+REM =============================================================================
+echo [ramibot] Checking repository-local G9v3-3B Heretic Q8_0 model...
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup-gguf.ps1
+if errorlevel 1 (
+    echo [ramibot] ERROR: Failed to download or verify the GGUF model.
+    goto :fail
+)
+
+echo [ramibot] Starting local llama.cpp server...
+%COMPOSE_CMD% -f compose.gguf.yaml up -d
+if errorlevel 1 (
+    echo [ramibot] ERROR: Failed to start the local GGUF server.
+    goto :fail
+)
+echo [ramibot]   GGUF server started on http://127.0.0.1:1234.
+echo.
+
+REM =============================================================================
+REM 5. Start Osiris from this checkout (no second Docker service)
+REM =============================================================================
+echo [ramibot] Starting Osiris on http://127.0.0.1:3000/osiris/ ...
+start "RamiBot Osiris" cmd /k "cd /d "%~dp0osiris" && npm run dev -- --hostname 0.0.0.0 --port 3000"
+
+REM =============================================================================
+REM 6. Ensure rami-kali container is running
 REM =============================================================================
 echo [ramibot] Starting rami-kali container...
 %COMPOSE_CMD% -f rami-kali\docker-compose.yml up -d
@@ -100,23 +132,31 @@ echo [ramibot]   rami-kali is ready.
 echo.
 
 REM =============================================================================
-REM 5. Start backend in a new terminal window
+REM 7. Start backend in a new terminal window
 REM =============================================================================
-echo [ramibot] Starting backend on http://localhost:8000 ...
-start "RamiBot Backend" cmd /k "cd /d "%~dp0backend" && call .venv\Scripts\activate.bat && python -m uvicorn main:app --reload --port 8000"
+echo [ramibot] Starting backend on http://localhost:8001 ...
+start "RamiBot Backend" cmd /k "cd /d "%~dp0backend" && call .venv\Scripts\activate.bat && python -m uvicorn main:app --reload --host 0.0.0.0 --port 8001"
 
 REM =============================================================================
-REM 6. Start frontend in a new terminal window
+REM 8. Start frontend in a new terminal window
 REM =============================================================================
 echo [ramibot] Starting frontend on http://localhost:5173 ...
 start "RamiBot Frontend" cmd /k "cd /d "%~dp0frontend" && call npm run dev"
 
 REM =============================================================================
-REM 7. Open browser after delay
+REM 9. Start ngrok public UI tunnel
 REM =============================================================================
-echo [ramibot] Opening browser in 4 seconds...
-timeout /t 4 /nobreak >nul
+echo [ramibot] Starting ngrok tunnel for the RamiBot UI...
+start "RamiBot ngrok" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start-ngrok.ps1"
+
+REM =============================================================================
+REM 10. Open browser after delay and print public URL
+REM =============================================================================
+echo [ramibot] Waiting for services in 12 seconds...
+timeout /t 12 /nobreak >nul
 start "" "http://localhost:5173"
+set "PUBLIC_URL="
+for /f "delims=" %%u in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\get-ngrok-url.ps1"') do set "PUBLIC_URL=%%u"
 
 REM =============================================================================
 REM Done
@@ -126,8 +166,10 @@ echo [ramibot] ============================================================
 echo [ramibot]  RamiBot is starting up!
 echo [ramibot] ============================================================
 echo.
-echo   Backend:   http://localhost:8000/docs
+echo   Backend:   http://localhost:8001/docs
 echo   Frontend:  http://localhost:5173
+echo   Osiris:    embedded in the RamiBot panel
+if defined PUBLIC_URL echo   Public UI: %PUBLIC_URL%
 echo.
 echo   Close the Backend / Frontend terminal windows to stop those services.
 echo   rami-kali container stays running in the background.

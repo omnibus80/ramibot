@@ -4,6 +4,7 @@ REM RamiBot — One-shot installer (Windows)
 REM Usage: Double-click or run from cmd: install.bat
 REM =============================================================================
 cd /d "%~dp0"
+set "PATH=%ProgramFiles%\Docker\Docker\resources\bin;%ProgramFiles%\nodejs;%LocalAppData%\Programs\Python\Python312;%LocalAppData%\Programs\Python\Python312\Scripts;%PATH%"
 
 echo.
 echo [install] ============================================================
@@ -96,7 +97,34 @@ cd ..
 echo [install] Frontend dependencies installed.
 
 REM =============================================================================
-REM 5. Settings file (never overwrite existing)
+REM 5. Osiris world intelligence app (official npm quick start)
+REM =============================================================================
+echo [install] Installing Osiris from the official repository...
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup-osiris.ps1
+if errorlevel 1 (
+    echo [install] ERROR: Failed to install Osiris.
+    goto :fail
+)
+
+REM =============================================================================
+REM 6. Repository-local GGUF model
+REM =============================================================================
+echo [install] Setting up the repository-local G9v3-3B Heretic Q8_0 model...
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup-gguf.ps1
+if errorlevel 1 (
+    echo [install] ERROR: Failed to download or verify the GGUF model.
+    goto :fail
+)
+
+echo [install] Installing ngrok tunnel client...
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-ngrok.ps1
+if errorlevel 1 (
+    echo [install] ERROR: Failed to install ngrok.
+    goto :fail
+)
+
+REM =============================================================================
+REM 7. Settings files (never overwrite existing)
 REM =============================================================================
 if exist "backend\settings.json" (
     echo [install] backend\settings.json already exists - skipping ^(config preserved^).
@@ -106,6 +134,8 @@ copy "backend\settings.example.json" "backend\settings.json" >nul
 echo [install] Created backend\settings.json from template.
 echo [install] IMPORTANT: Edit backend\settings.json and add your API keys.
 :settings_done
+if not exist "backend\.env" copy "backend\.env.example" "backend\.env" >nul
+if not exist ".env" copy ".env.example" ".env" >nul
 
 REM =============================================================================
 REM Done
